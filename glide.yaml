@@ -1,0 +1,43 @@
+package: github.com/enxebre/cluster-api-provider-aws
+import:
+- package: github.com/aws/aws-sdk-go
+  subpackages:
+  - aws
+  - aws/credentials
+  - aws/session
+  - service/ec2
+  - service/ec2/ec2iface
+  - service/elb
+  - service/elb/elbiface
+- package: github.com/golang/glog
+- package: github.com/kubernetes-incubator/apiserver-builder
+  subpackages:
+  - pkg/controller
+- package: github.com/openshift/cluster-operator
+  subpackages:
+  - pkg/api
+  - pkg/apis/clusteroperator/v1alpha1
+  - pkg/controller
+  - pkg/logging
+- package: github.com/sirupsen/logrus
+- package: github.com/spf13/pflag
+- package: k8s.io/apimachinery
+  subpackages:
+  - pkg/api/equality
+  - pkg/apis/meta/v1
+  - pkg/runtime/serializer
+- package: k8s.io/apiserver
+  subpackages:
+  - pkg/util/logs
+- package: k8s.io/client-go
+  subpackages:
+  - kubernetes
+- package: sigs.k8s.io/cluster-api
+  subpackages:
+  - cloud/aws
+  - pkg/apis/cluster/common
+  - pkg/apis/cluster/v1alpha1
+  - pkg/client/clientset_generated/clientset
+  - pkg/controller/config
+  - pkg/controller/machine
+  - pkg/controller/sharedinformers
