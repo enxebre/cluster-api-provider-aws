@@ -263,31 +263,31 @@ func (a *Actuator) CreateMachine(cluster *clusterv1.Cluster, machine *clusterv1.
 	// For now, these are fixed
 	blkDeviceMappings := []*ec2.BlockDeviceMapping{
 		{
-			DeviceName: aws.String("/dev/sda1"),
+			DeviceName: aws.String("/dev/sda"),
 			Ebs: &ec2.EbsBlockDevice{
 				DeleteOnTermination: aws.Bool(true),
 				VolumeSize:          aws.Int64(100),
 				VolumeType:          aws.String("gp2"),
 			},
 		},
-		{
-			DeviceName: aws.String("/dev/sdb"),
-			Ebs: &ec2.EbsBlockDevice{
-				DeleteOnTermination: aws.Bool(true),
-				VolumeSize:          aws.Int64(100),
-				VolumeType:          aws.String("gp2"),
-			},
-		},
+		//{
+		//	DeviceName: aws.String("/dev/sdb"),
+		//	Ebs: &ec2.EbsBlockDevice{
+		//		DeleteOnTermination: aws.Bool(true),
+		//		VolumeSize:          aws.Int64(100),
+		//		VolumeType:          aws.String("gp2"),
+		//	},
+		//},
 	}
 
 	// Only compute nodes should get user data, and it's quite important that masters do not as the
 	// AWS actuator for these is running on the root CO cluster currently, and we do not want to leak
 	// root CO cluster bootstrap kubeconfigs to the target cluster.
-	userData, err := a.userDataGenerator(controller.MachineHasRole(machine, capicommon.MasterRole), coMachineSetSpec.Infra)
-	if err != nil {
-		return nil, err
-	}
-	userDataEnc := base64.StdEncoding.EncodeToString([]byte(userData))
+	//userData, err := a.userDataGenerator(controller.MachineHasRole(machine, capicommon.MasterRole), coMachineSetSpec.Infra)
+	//if err != nil {
+	//	return nil, err
+	//}
+	userDataEnc := base64.StdEncoding.EncodeToString([]byte(""))
 
 	inputConfig := ec2.RunInstancesInput{
 		ImageId:      describeAMIResult.Images[0].ImageId,
