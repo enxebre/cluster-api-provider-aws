@@ -37,10 +37,10 @@ build: kubernetes-cluster-api kubernetes-controller-manager aws-machine-controll
 .PHONY: $(BINDIR)/aws-machine-controller
 aws-machine-controller: $(BINDIR)/aws-machine-controller
 $(BINDIR)/aws-machine-controller:
-  $(GO_BUILD) -o $@ ./cmd
+	$(GO_BUILD) -o $@ ./cmd
 
 aws-machine-controller-image: $(BINDIR)/aws-machine-controller
-  docker build -t $(AWS_MACHINE_CONTROLLER_IMAGE) --file build/aws-machine-controller/Dockerfile .
+	docker build -t $(AWS_MACHINE_CONTROLLER_IMAGE) --file build/aws-machine-controller/Dockerfile .
 
 .PHONY: $(CLUSTERAPI_BIN)/apiserver
 $(CLUSTERAPI_BIN)/apiserver: .apiServerBuilderImage
