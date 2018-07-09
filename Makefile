@@ -1,15 +1,18 @@
-
 all: build
 
 # Define constants
 ##################
 BINDIR        ?= bin
+PLATFORM      ?= linux
+ARCH          ?= amd64
 CLUSTERAPI_BIN = $(BINDIR)/cluster-api
 VERSION       ?= $(shell git describe --always --abbrev=7 --dirty)
 GO_VERSION     = 1.9
+GO_BUILD       = env GOOS=$(PLATFORM) GOARCH=$(ARCH) go build -i $(GOFLAGS)
 
 CLUSTER_API_IMAGE = $(REGISTRY)cluster-api:$(VERSION)
 CONTROLLER_MANAGER_IMAGE = $(REGISTRY)controller-manager:$(VERSION)
+AWS_MACHINE_CONTROLLER_IMAGE = $(REGISTRY)aws-machine-controller:$(VERSION)
 
 # Some prereq stuff
 ###################
@@ -29,7 +32,15 @@ clean-build-image:
 # Build
 #######
 
-build: kubernetes-cluster-api kubernetes-controller-manager
+build: kubernetes-cluster-api kubernetes-controller-manager aws-machine-controller
+
+.PHONY: $(BINDIR)/aws-machine-controller
+aws-machine-controller: $(BINDIR)/aws-machine-controller
+$(BINDIR)/aws-machine-controller:
+  $(GO_BUILD) -o $@ ./cmd
+
+aws-machine-controller-image: $(BINDIR)/aws-machine-controller
+  docker build -t $(AWS_MACHINE_CONTROLLER_IMAGE) --file build/aws-machine-controller/Dockerfile .
 
 .PHONY: $(CLUSTERAPI_BIN)/apiserver
 $(CLUSTERAPI_BIN)/apiserver: .apiServerBuilderImage
@@ -44,6 +55,6 @@ kubernetes-controller-manager: $(CLUSTERAPI_BIN)/controller-manager build/contro
 	cp build/controller-manager-image/Dockerfile $(CLUSTERAPI_BIN)
 	docker build -t $(CONTROLLER_MANAGER_IMAGE) ./$(CLUSTERAPI_BIN)
 
-push: kubernetes-cluster-api kubernetes-controller-manager
+push: kubernetes-cluster-api kubernetes-controller-manager aws-machine-controller-image
 	docker push $(CLUSTER_API_IMAGE)
 	docker push $(CONTROLLER_MANAGER_IMAGE)
