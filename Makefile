@@ -58,3 +58,4 @@ kubernetes-controller-manager: $(CLUSTERAPI_BIN)/controller-manager build/contro
 push: kubernetes-cluster-api kubernetes-controller-manager aws-machine-controller-image
 	docker push $(CLUSTER_API_IMAGE)
 	docker push $(CONTROLLER_MANAGER_IMAGE)
+	docker push $(AWS_MACHINE_CONTROLLER_IMAGE)
