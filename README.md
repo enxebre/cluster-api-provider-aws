@@ -1,4 +1,4 @@
-# Cluster API Provier AWS
+# Cluster API Provider AWS
 
 ## Build the controller
 Update dependencies if needed:
