@@ -1,4 +1,4 @@
-# Copyright 2018 The Kubernetes Authors.
+# Copyright 2017 The Kubernetes Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,13 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-FROM gcr.io/google-containers/debian-base-amd64:0.2
+FROM ubuntu:14.04
 
-RUN export DEBIAN_FRONTEND=noninteractive && \
-    apt-get update && \
-    apt-get install ca-certificates -y && \
-    rm -rf /var/lib/apt/lists/*
+RUN apt-get update
+RUN apt-get install -y ca-certificates
 
-COPY aws-machine-controller opt/services/
+ADD controller-manager .
 
-ENTRYPOINT ["/opt/services/aws-machine-controller"]
+RUN chmod +x controller-manager
+
+ENTRYPOINT ["./controller-manager"]

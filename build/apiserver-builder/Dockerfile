@@ -1,4 +1,4 @@
-# Copyright 2018 The Kubernetes Authors.
+# Copyright 2017 The Kubernetes Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,13 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-FROM gcr.io/google-containers/debian-base-amd64:0.2
+FROM golang:GO_VERSION
 
-RUN export DEBIAN_FRONTEND=noninteractive && \
-    apt-get update && \
-    apt-get install ca-certificates -y && \
-    rm -rf /var/lib/apt/lists/*
+# Avoid permission issues when glide pulls mercurial repos as root
+RUN printf "[trusted]\nusers = *\n" > /root/.hgrc
 
-COPY aws-machine-controller opt/services/
-
-ENTRYPOINT ["/opt/services/aws-machine-controller"]
+RUN cd /tmp && \
+    curl -L -O https://github.com/kubernetes-incubator/apiserver-builder/releases/download/v1.9-alpha.2/apiserver-builder-v1.9-alpha.2-linux-amd64.tar.gz && \
+    tar -xzf apiserver-builder-v1.9-alpha.2-linux-amd64.tar.gz && \
+    cp ./bin/* /usr/bin
