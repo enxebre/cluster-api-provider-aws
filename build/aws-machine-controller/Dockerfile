@@ -19,6 +19,6 @@ RUN export DEBIAN_FRONTEND=noninteractive && \
     apt-get install ca-certificates -y && \
     rm -rf /var/lib/apt/lists/*
 
-COPY bin/aws-machine-controller opt/services/
+COPY aws-machine-controller opt/services/
 
 ENTRYPOINT ["/opt/services/aws-machine-controller"]
