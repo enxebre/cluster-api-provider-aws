@@ -23,7 +23,7 @@ AWS_MACHINE_CONTROLLER_IMAGE = $(REGISTRY)aws-machine-controller:$(VERSION)
 # Some prereq stuff
 ###################
 
-.clusterOperatorBuildImage: build/build-image/Dockerfile
+.buildImage: build/build-image/Dockerfile
 	sed "s/GO_VERSION/$(GO_VERSION)/g" < build/build-image/Dockerfile | \
 	  docker build -t buildimage -
 
@@ -44,12 +44,12 @@ clean-images: ## Remove built images
 # Build
 #######
 
-build: .clusterOperatorBuildImage apiserver aws-machine-controller ## Build all binaries
+build: .buildImage apiserver aws-machine-controller ## Build all binaries
 images: aws-machine-controller-image k8s-cluster-api-image k8s-controller-manager-image ## Create all images
 
 .PHONY: $(BINDIR)/aws-machine-controller
 aws-machine-controller: $(BINDIR)/aws-machine-controller ## Build aws-machine-controller binary
-$(BINDIR)/aws-machine-controller: .clusterOperatorBuildImage
+$(BINDIR)/aws-machine-controller: .buildImage
 	mkdir -p $(PWD)/$(BINDIR)
 	$(DOCKER_CMD) $(GO_BUILD) -o $@ $(AWS_MACHINE_CONTROLLER_PKG)/cmd
 
