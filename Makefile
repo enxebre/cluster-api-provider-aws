@@ -74,7 +74,7 @@ k8s-cluster-api-image: $(CLUSTERAPI_BIN)/apiserver build/clusterapi-image/Docker
 	docker tag $(CLUSTER_API_IMAGE) $(CLUSTER_API_MUTABLE_IMAGE)
 
 .PHONY: k8s-controller-manager-image
-k8s-controller-manager-image: $(CLUSTERAPI_BIN)/controller-manager build/controller-manager-image/Dockerfile ## Build controller-manager image
+k8s-controller-manager-image: $(CLUSTERAPI_BIN)/apiserver build/controller-manager-image/Dockerfile ## Build controller-manager image
 	cp build/controller-manager-image/Dockerfile $(CLUSTERAPI_BIN)
 	docker build -t $(CONTROLLER_MANAGER_IMAGE) ./$(CLUSTERAPI_BIN)
 	docker tag $(CONTROLLER_MANAGER_IMAGE) $(CONTROLLER_MANAGER_MUTABLE_IMAGE)
