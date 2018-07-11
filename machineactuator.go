@@ -518,11 +518,13 @@ func (a *Actuator) updateStatus(machine *clusterv1.Machine, instance *ec2.Instan
 }
 
 func getClusterID(machine *clusterv1.Machine) (string, error) {
-	coMachineSetSpec, err := controller.MachineSetSpecFromClusterAPIMachineSpec(&machine.Spec)
-	if err != nil {
-		return "", err
-	}
-	return coMachineSetSpec.ClusterID, nil
+	//coMachineSetSpec, err := controller.MachineSetSpecFromClusterAPIMachineSpec(&machine.Spec)
+	//if err != nil {
+	//	return "", err
+	//}
+	//return coMachineSetSpec.ClusterID, nil
+	//TODO: get this dynamically
+	return "test", nil
 }
 
 // template for user data

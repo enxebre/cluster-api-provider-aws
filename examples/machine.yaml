@@ -1,0 +1,85 @@
+---
+apiVersion: "cluster.k8s.io/v1alpha1"
+kind: Cluster
+metadata:
+  name: test
+  namespace: test
+spec:
+  clusterNetwork:
+    services:
+      cidrBlocks:
+        - "10.0.0.1/24"
+    pods:
+      cidrBlocks:
+        - "10.0.0.2/24"
+    serviceDomain: example.com
+  providerConfig:
+    value:
+      apiVersion: clusteroperator.openshift.io/v1alpha1
+      kind: ClusterProviderConfigSpec
+      clusterId: test
+      clusterVersionRef:
+        namespace: test
+        name: test
+      hardware:
+        aws:
+          accountSecret:
+            name: test-aws-creds
+          sshSecret:
+            name: test-ssh-key
+          sshUser: centos
+          sslSecret:
+            name: test-certs
+          region: eu-west-1
+          keyPairName: test
+      defaultHardwareSpec:
+        aws:
+          instanceType: t1.micro
+      machineSets:
+      - nodeType: Master
+        size: 1
+      - shortName: infra
+        nodeType: Compute
+        infra: true
+        size: 1
+      - shortName: compute
+        nodeType: Compute
+        size: 1
+---
+apiVersion: "cluster.k8s.io/v1alpha1"
+kind: Machine
+metadata:
+  name: test
+  namespace: test
+  generateName: vs-master-
+  labels:
+    set: master
+spec:
+  providerConfig:
+    value:
+      apiVersion: clusteroperator.openshift.io/v1alpha1
+      kind: MachineSetProviderConfigSpec
+      clusterId: test
+      clusterHardware:
+        aws:
+          accountSecret:
+            name: test-aws-creds
+          keyPairName: test
+          region: eu-west-1
+          sshSecret:
+            name: test-ssh-key
+          sshUser: centos
+          sslSecret:
+            name: test-certs
+      hardware:
+        aws:
+          instanceType: t1.micro
+      infra: false
+      vmImage:
+        # CoreOS-stable-1520.5.0
+        awsImage: ami-03f6257a
+  versions:
+    kubelet: 1.10.1
+    controlPlane: 1.10.1
+  roles:
+  - Master

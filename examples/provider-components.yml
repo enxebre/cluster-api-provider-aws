@@ -44,7 +44,7 @@ spec:
             cpu: 100m
             memory: 30Mi
       - name: aws-machine-controller
-        image: quay.io/alberto_lamela/aws-machine-controller
+        image: aws-machine-controller:canary
         volumeMounts:
           - name: config
             mountPath: /etc/kubernetes
@@ -61,7 +61,7 @@ spec:
           - /opt/services/aws-machine-controller
         args:
           - --log-level=debug
-          - --default-availability-zone=eu-west-1
+          - --default-availability-zone=eu-west-1b
           - --kubeconfig=/etc/kubernetes/admin.conf
         resources:
           requests:
