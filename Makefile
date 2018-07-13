@@ -23,6 +23,17 @@ CONTROLLER_MANAGER_MUTABLE_IMAGE     = $(REGISTRY)controller-manager:$(MUTABLE_T
 AWS_MACHINE_CONTROLLER_IMAGE         = $(REGISTRY)aws-machine-controller:$(VERSION)
 AWS_MACHINE_CONTROLLER_MUTABLE_IMAGE = $(REGISTRY)aws-machine-controller:$(MUTABLE_TAG)
 
+generate: gendeepcopy
+
+#	go get -v k8s.io/code-generator/cmd/deepcopy-gen
+#	deepcopy-gen \
+
+gendeepcopy:
+	/Users/albertogarla/go/src/k8s.io/code-generator/cmd/deepcopy-gen/deepcopy-gen \
+	  -i ./awsproviderconfig,./awsproviderconfig/v1alpha1 \
+	  -O zz_generated.deepcopy \
+	  -h boilerplate.go.txt
+
 # Some prereq stuff
 ###################
 
@@ -58,6 +69,14 @@ $(BINDIR)/aws-machine-controller: .buildImage
 
 .PHONY: aws-machine-controller-image
 aws-machine-controller-image: $(BINDIR)/aws-machine-controller aws-machine-controller ## Create aws-machine-controller image
+	cp build/aws-machine-controller/Dockerfile $(BINDIR)/Dockerfile
+	docker build -t $(AWS_MACHINE_CONTROLLER_IMAGE) ./$(BINDIR)
+	docker tag $(AWS_MACHINE_CONTROLLER_IMAGE) $(AWS_MACHINE_CONTROLLER_MUTABLE_IMAGE)
+
+# We need this to build the binary locally so docker volume works with buildimage
+# then we build the image hitting the minikube docker daemon
+.PHONY: aws-machine-controller-image-nobuild
+aws-machine-controller-image-nobuild:
 	cp build/aws-machine-controller/Dockerfile $(BINDIR)/Dockerfile
 	docker build -t $(AWS_MACHINE_CONTROLLER_IMAGE) ./$(BINDIR)
 	docker tag $(AWS_MACHINE_CONTROLLER_IMAGE) $(AWS_MACHINE_CONTROLLER_MUTABLE_IMAGE)
