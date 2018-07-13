@@ -27,8 +27,8 @@ import (
 
 	"k8s.io/apimachinery/pkg/api/equality"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/apimachinery/pkg/runtime"
 
 	capicommon "sigs.k8s.io/cluster-api/pkg/apis/cluster/common"
 	clusterv1 "sigs.k8s.io/cluster-api/pkg/apis/cluster/v1alpha1"
@@ -37,10 +37,10 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/ec2"
 
-	coapi "github.com/openshift/cluster-operator/pkg/api"
-	cov1 "github.com/openshift/cluster-operator/pkg/apis/clusteroperator/v1alpha1"
+	cov1 "github.com/enxebre/cluster-api-provider-aws/awsproviderconfig/v1alpha1"
 	"github.com/openshift/cluster-operator/pkg/controller"
 	clustoplog "github.com/openshift/cluster-operator/pkg/logging"
+	awsconfigv1 "github.com/enxebre/cluster-api-provider-aws/awsproviderconfig/v1alpha1"
 )
 
 const (
@@ -81,23 +81,37 @@ var stateMask int64 = 0xFF
 type Actuator struct {
 	kubeClient              kubernetes.Interface
 	clusterClient           clusterclient.Interface
-	codecFactory            serializer.CodecFactory
+	//codecFactory            serializer.CodecFactory
 	defaultAvailabilityZone string
 	logger                  *log.Entry
 	clientBuilder           func(kubeClient kubernetes.Interface, mSpec *cov1.MachineSetSpec, namespace, region string) (Client, error)
 	userDataGenerator       func(master, infra bool) (string, error)
+	awsProviderConfigCodec  *awsconfigv1.AWSProviderConfigCodec
+	scheme                  *runtime.Scheme
 }
 
 // NewActuator returns a new AWS Actuator
 func NewActuator(kubeClient kubernetes.Interface, clusterClient clusterclient.Interface, logger *log.Entry, defaultAvailabilityZone string) *Actuator {
+
+	scheme, err := awsconfigv1.NewScheme()
+	if err != nil {
+		return nil
+	}
+	codec, err := awsconfigv1.NewCodec()
+	if err != nil {
+		return nil
+	}
+
 	actuator := &Actuator{
 		kubeClient:              kubeClient,
 		clusterClient:           clusterClient,
-		codecFactory:            coapi.Codecs,
+		//codecFactory:            coapi.Codecs,
 		defaultAvailabilityZone: defaultAvailabilityZone,
 		logger:                  logger,
 		clientBuilder:           NewClient,
 		userDataGenerator:       generateUserData,
+		awsProviderConfigCodec:  codec,
+		scheme:                 scheme,
 	}
 	return actuator
 }
@@ -129,33 +143,33 @@ func (a *Actuator) Create(cluster *clusterv1.Cluster, machine *clusterv1.Machine
 func (a *Actuator) CreateMachine(cluster *clusterv1.Cluster, machine *clusterv1.Machine) (*ec2.Instance, error) {
 	mLog := clustoplog.WithMachine(a.logger, machine)
 	// Extract cluster operator cluster
-	clusterSpec, err := controller.ClusterDeploymentSpecFromCluster(cluster)
+	awsClusterProviderConfig, err := a.awsProviderConfigCodec.ClusterProviderFromProviderConfig(cluster.Spec.ProviderConfig)
 	if err != nil {
 		return nil, err
 	}
 
-	if clusterSpec.Hardware.AWS == nil {
+	if awsClusterProviderConfig.ClusterDeploymentSpec.Hardware.AWS == nil {
 		return nil, fmt.Errorf("Cluster does not contain an AWS hardware spec")
 	}
 
-	coMachineSetSpec, err := controller.MachineSetSpecFromClusterAPIMachineSpec(&machine.Spec)
+	awsProviderConfig, err := a.awsProviderConfigCodec.MachineProviderFromProviderConfig(machine.Spec.ProviderConfig)
 	if err != nil {
 		return nil, err
 	}
 
-	region := clusterSpec.Hardware.AWS.Region
+	region := awsClusterProviderConfig.ClusterDeploymentSpec.Hardware.AWS.Region
 	mLog.Debugf("Obtaining EC2 client for region %q", region)
-	client, err := a.clientBuilder(a.kubeClient, coMachineSetSpec, machine.Namespace, region)
+	client, err := a.clientBuilder(a.kubeClient, &awsProviderConfig.MachineSetSpec, machine.Namespace, region)
 	if err != nil {
 		return nil, fmt.Errorf("unable to obtain EC2 client: %v", err)
 	}
 
-	if coMachineSetSpec.VMImage.AWSImage == nil {
+	if awsProviderConfig.VMImage.AWSImage == nil {
 		return nil, fmt.Errorf("machine does not have an AWS image set")
 	}
 
 	// Get AMI to use
-	amiName := *coMachineSetSpec.VMImage.AWSImage
+	amiName := *awsProviderConfig.VMImage.AWSImage
 
 	mLog.Debugf("Describing AMI %s", amiName)
 	imageIds := []*string{aws.String(amiName)}
@@ -171,7 +185,7 @@ func (a *Actuator) CreateMachine(cluster *clusterv1.Cluster, machine *clusterv1.
 	}
 
 	// Describe VPC
-	vpcName := clusterSpec.ClusterID
+	vpcName := awsClusterProviderConfig.ClusterDeploymentSpec.ClusterID
 	vpcNameFilter := "tag:Name"
 	describeVpcsRequest := ec2.DescribeVpcsInput{
 		Filters: []*ec2.Filter{{Name: &vpcNameFilter, Values: []*string{&vpcName}}},
@@ -205,7 +219,7 @@ func (a *Actuator) CreateMachine(cluster *clusterv1.Cluster, machine *clusterv1.
 	}
 
 	// Determine security groups
-	describeSecurityGroupsInput := buildDescribeSecurityGroupsInput(vpcID, vpcName, controller.MachineHasRole(machine, capicommon.MasterRole), coMachineSetSpec.Infra)
+	describeSecurityGroupsInput := buildDescribeSecurityGroupsInput(vpcID, vpcName, controller.MachineHasRole(machine, capicommon.MasterRole), awsProviderConfig.Infra)
 	describeSecurityGroupsOutput, err := client.DescribeSecurityGroups(describeSecurityGroupsInput)
 	if err != nil {
 		return nil, err
@@ -238,17 +252,17 @@ func (a *Actuator) CreateMachine(cluster *clusterv1.Cluster, machine *clusterv1.
 		subHostType = subHostTypeDefault
 		shutdownBehavior = shutdownBehaviorStop
 	}
-	if coMachineSetSpec.Infra {
+	if awsProviderConfig.Infra {
 		subHostType = subHostTypeInfra
 	}
 	mLog.WithFields(log.Fields{"hostType": hostType, "subHostType": subHostType}).Debugf("creating instance with host type")
 
 	// Add tags to the created machine
 	tagList := []*ec2.Tag{
-		{Key: aws.String("clusterid"), Value: aws.String(clusterSpec.ClusterID)},
+		{Key: aws.String("clusterid"), Value: aws.String(awsClusterProviderConfig.ClusterDeploymentSpec.ClusterID)},
 		{Key: aws.String("host-type"), Value: aws.String(hostType)},
 		{Key: aws.String("sub-host-type"), Value: aws.String(subHostType)},
-		{Key: aws.String("kubernetes.io/cluster/" + clusterSpec.ClusterID), Value: aws.String(clusterSpec.ClusterID)},
+		{Key: aws.String("kubernetes.io/cluster/" + awsClusterProviderConfig.ClusterDeploymentSpec.ClusterID), Value: aws.String(awsClusterProviderConfig.ClusterDeploymentSpec.ClusterID)},
 		{Key: aws.String("Name"), Value: aws.String(machine.Name)},
 	}
 	tagInstance := &ec2.TagSpecification{
@@ -291,10 +305,10 @@ func (a *Actuator) CreateMachine(cluster *clusterv1.Cluster, machine *clusterv1.
 
 	inputConfig := ec2.RunInstancesInput{
 		ImageId:      describeAMIResult.Images[0].ImageId,
-		InstanceType: aws.String(coMachineSetSpec.Hardware.AWS.InstanceType),
+		InstanceType: aws.String(awsProviderConfig.Hardware.AWS.InstanceType),
 		MinCount:     aws.Int64(1),
 		MaxCount:     aws.Int64(1),
-		KeyName:      aws.String(clusterSpec.Hardware.AWS.KeyPairName),
+		KeyName:      aws.String(awsClusterProviderConfig.ClusterDeploymentSpec.Hardware.AWS.KeyPairName),
 		IamInstanceProfile: &ec2.IamInstanceProfileSpecification{
 			Name: aws.String(iamRole(machine)),
 		},
@@ -332,16 +346,16 @@ func (a *Actuator) Delete(cluster *clusterv1.Cluster, machine *clusterv1.Machine
 func (a *Actuator) DeleteMachine(machine *clusterv1.Machine) error {
 	mLog := clustoplog.WithMachine(a.logger, machine)
 
-	coMachineSetSpec, err := controller.MachineSetSpecFromClusterAPIMachineSpec(&machine.Spec)
+	awsProviderConfig, err := a.awsProviderConfigCodec.MachineProviderFromProviderConfig(machine.Spec.ProviderConfig)
 	if err != nil {
 		return err
 	}
 
-	if coMachineSetSpec.ClusterHardware.AWS == nil {
+	if awsProviderConfig.ClusterHardware.AWS == nil {
 		return fmt.Errorf("machine does not contain AWS hardware spec")
 	}
-	region := coMachineSetSpec.ClusterHardware.AWS.Region
-	client, err := a.clientBuilder(a.kubeClient, coMachineSetSpec, machine.Namespace, region)
+	region := awsProviderConfig.ClusterHardware.AWS.Region
+	client, err := a.clientBuilder(a.kubeClient, &awsProviderConfig.MachineSetSpec, machine.Namespace, region)
 	if err != nil {
 		return fmt.Errorf("error getting EC2 client: %v", err)
 	}
@@ -365,23 +379,23 @@ func (a *Actuator) Update(cluster *clusterv1.Cluster, machine *clusterv1.Machine
 	mLog := clustoplog.WithMachine(a.logger, machine)
 	mLog.Debugf("updating machine")
 
-	clusterSpec, err := controller.ClusterDeploymentSpecFromCluster(cluster)
+	awsClusterProviderConfig, err := a.awsProviderConfigCodec.ClusterProviderFromProviderConfig(cluster.Spec.ProviderConfig)
 	if err != nil {
 		return err
 	}
 
-	if clusterSpec.Hardware.AWS == nil {
+	if awsClusterProviderConfig.ClusterDeploymentSpec.Hardware.AWS == nil {
 		return fmt.Errorf("Cluster does not contain an AWS hardware spec")
 	}
 
-	coMachineSetSpec, err := controller.MachineSetSpecFromClusterAPIMachineSpec(&machine.Spec)
+	awsProviderConfig, err := a.awsProviderConfigCodec.MachineProviderFromProviderConfig(machine.Spec.ProviderConfig)
 	if err != nil {
 		return err
 	}
 
-	region := clusterSpec.Hardware.AWS.Region
+	region := awsClusterProviderConfig.ClusterDeploymentSpec.Hardware.AWS.Region
 	mLog.WithField("region", region).Debugf("obtaining EC2 client for region")
-	client, err := a.clientBuilder(a.kubeClient, coMachineSetSpec, machine.Namespace, region)
+	client, err := a.clientBuilder(a.kubeClient, &awsProviderConfig.MachineSetSpec, machine.Namespace, region)
 	if err != nil {
 		return fmt.Errorf("unable to obtain EC2 client: %v", err)
 	}
@@ -428,16 +442,16 @@ func (a *Actuator) Exists(cluster *clusterv1.Cluster, machine *clusterv1.Machine
 	mLog := clustoplog.WithMachine(a.logger, machine)
 	mLog.Debugf("checking if machine exists")
 
-	coMachineSetSpec, err := controller.MachineSetSpecFromClusterAPIMachineSpec(&machine.Spec)
+	awsProviderConfig, err := a.awsProviderConfigCodec.MachineProviderFromProviderConfig(machine.Spec.ProviderConfig)
 	if err != nil {
 		return false, err
 	}
 
-	if coMachineSetSpec.ClusterHardware.AWS == nil {
+	if awsProviderConfig.ClusterHardware.AWS == nil {
 		return false, fmt.Errorf("machineSet does not contain AWS hardware spec")
 	}
-	region := coMachineSetSpec.ClusterHardware.AWS.Region
-	client, err := a.clientBuilder(a.kubeClient, coMachineSetSpec, machine.Namespace, region)
+	region := awsProviderConfig.ClusterHardware.AWS.Region
+	client, err := a.clientBuilder(a.kubeClient, &awsProviderConfig.MachineSetSpec, machine.Namespace, region)
 	if err != nil {
 		return false, fmt.Errorf("error getting EC2 client: %v", err)
 	}
@@ -462,7 +476,7 @@ func (a *Actuator) updateStatus(machine *clusterv1.Machine, instance *ec2.Instan
 	mLog.Debug("updating status")
 
 	// Starting with a fresh status as we assume full control of it here.
-	awsStatus, err := controller.AWSMachineProviderStatusFromClusterAPIMachine(machine)
+	awsStatus, err := a.awsProviderConfigCodec.AWSMachineProviderStatusFromClusterAPIMachine(machine)
 	if err != nil {
 		return err
 	}
@@ -493,7 +507,7 @@ func (a *Actuator) updateStatus(machine *clusterv1.Machine, instance *ec2.Instan
 		awsStatus.LastELBSync = nil
 	}
 
-	awsStatusRaw, err := controller.ClusterAPIMachineProviderStatusFromAWSMachineProviderStatus(awsStatus)
+	awsStatusRaw, err := a.awsProviderConfigCodec.ClusterAPIMachineProviderStatusFromAWSMachineProviderStatus(awsStatus)
 	if err != nil {
 		mLog.Errorf("error encoding AWS provider status: %v", err)
 		return err

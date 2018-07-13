@@ -15,8 +15,8 @@ spec:
     serviceDomain: example.com
   providerConfig:
     value:
-      apiVersion: clusteroperator.openshift.io/v1alpha1
-      kind: ClusterProviderConfigSpec
+      apiVersion: awsproviderconfig/v1alpha1
+      kind: AWSClusterProviderConfig
       clusterId: test
       clusterVersionRef:
         namespace: test
@@ -57,8 +57,8 @@ metadata:
 spec:
   providerConfig:
     value:
-      apiVersion: clusteroperator.openshift.io/v1alpha1
-      kind: MachineSetProviderConfigSpec
+      apiVersion: awsproviderconfig/v1alpha1
+      kind: AWSMachineProviderConfig
       clusterId: test
       clusterHardware:
         aws:

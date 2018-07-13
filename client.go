@@ -30,7 +30,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/elb"
 	"github.com/aws/aws-sdk-go/service/elb/elbiface"
 
-	cov1 "github.com/openshift/cluster-operator/pkg/apis/clusteroperator/v1alpha1"
+	cov1 "github.com/enxebre/cluster-api-provider-aws/awsproviderconfig/v1alpha1"
 )
 
 //go:generate mockgen -source=./client.go -destination=./mock/client_generated.go -package=mock
