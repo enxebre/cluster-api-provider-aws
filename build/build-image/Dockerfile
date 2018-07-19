@@ -23,6 +23,7 @@ ENV GLIDE_VERSION=v0.12.3 \
     GLIDE_HOME=/go/src/github.com/openshift/cluster-operator/.glide
 RUN curl -sSL https://github.com/Masterminds/glide/releases/download/$GLIDE_VERSION/glide-$GLIDE_VERSION-linux-amd64.tar.gz \
     | tar -vxz -C /usr/local/bin --strip=1
+RUN go get -u github.com/sgotti/glide-vc
 
 # Install the golint, use this to check our source for niceness
 RUN go get -u github.com/golang/lint/golint
