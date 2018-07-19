@@ -55,6 +55,11 @@ clean-images: ## Remove built images
 	docker rmi -f apiserverbuilderimage > /dev/null 2>&1 || true
 	docker rmi -f buildimage > /dev/null 2>&1 || true
 
+.PHONY: deps
+deps: .buildImage
+	$(DOCKER_CMD) glide install --strip-vendor
+	$(DOCKER_CMD) glide-vc --use-lock-file --no-tests --only-code
+
 # Build
 #######
 

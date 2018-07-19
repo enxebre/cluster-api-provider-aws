@@ -3,8 +3,7 @@
 ## Build the controller
 Update dependencies if needed:
 ```
-glide install --strip-vendor
-glide-vc --use-lock-file --no-tests --only-code
+make deps
 ```
 Then:
 
