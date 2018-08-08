@@ -27,8 +27,8 @@ import (
 
 	"k8s.io/apimachinery/pkg/api/equality"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/kubernetes"
 
 	capicommon "sigs.k8s.io/cluster-api/pkg/apis/cluster/common"
 	clusterv1 "sigs.k8s.io/cluster-api/pkg/apis/cluster/v1alpha1"
@@ -37,10 +37,10 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/ec2"
 
+	awsconfigv1 "github.com/enxebre/cluster-api-provider-aws/awsproviderconfig/v1alpha1"
 	cov1 "github.com/enxebre/cluster-api-provider-aws/awsproviderconfig/v1alpha1"
 	"github.com/openshift/cluster-operator/pkg/controller"
 	clustoplog "github.com/openshift/cluster-operator/pkg/logging"
-	awsconfigv1 "github.com/enxebre/cluster-api-provider-aws/awsproviderconfig/v1alpha1"
 )
 
 const (
@@ -79,8 +79,8 @@ var stateMask int64 = 0xFF
 
 // Actuator is the AWS-specific actuator for the Cluster API machine controller
 type Actuator struct {
-	kubeClient              kubernetes.Interface
-	clusterClient           clusterclient.Interface
+	kubeClient    kubernetes.Interface
+	clusterClient clusterclient.Interface
 	//codecFactory            serializer.CodecFactory
 	defaultAvailabilityZone string
 	logger                  *log.Entry
@@ -103,15 +103,15 @@ func NewActuator(kubeClient kubernetes.Interface, clusterClient clusterclient.In
 	}
 
 	actuator := &Actuator{
-		kubeClient:              kubeClient,
-		clusterClient:           clusterClient,
+		kubeClient:    kubeClient,
+		clusterClient: clusterClient,
 		//codecFactory:            coapi.Codecs,
 		defaultAvailabilityZone: defaultAvailabilityZone,
 		logger:                  logger,
 		clientBuilder:           NewClient,
 		userDataGenerator:       generateUserData,
 		awsProviderConfigCodec:  codec,
-		scheme:                 scheme,
+		scheme:                  scheme,
 	}
 	return actuator
 }
@@ -185,7 +185,7 @@ func (a *Actuator) CreateMachine(cluster *clusterv1.Cluster, machine *clusterv1.
 	}
 
 	// Describe VPC
-	vpcName := awsClusterProviderConfig.ClusterDeploymentSpec.ClusterID
+	vpcName := "meh.tectonic.kuwit.rocks"
 	vpcNameFilter := "tag:Name"
 	describeVpcsRequest := ec2.DescribeVpcsInput{
 		Filters: []*ec2.Filter{{Name: &vpcNameFilter, Values: []*string{&vpcName}}},
@@ -259,10 +259,12 @@ func (a *Actuator) CreateMachine(cluster *clusterv1.Cluster, machine *clusterv1.
 
 	// Add tags to the created machine
 	tagList := []*ec2.Tag{
-		{Key: aws.String("clusterid"), Value: aws.String(awsClusterProviderConfig.ClusterDeploymentSpec.ClusterID)},
-		{Key: aws.String("host-type"), Value: aws.String(hostType)},
-		{Key: aws.String("sub-host-type"), Value: aws.String(subHostType)},
-		{Key: aws.String("kubernetes.io/cluster/" + awsClusterProviderConfig.ClusterDeploymentSpec.ClusterID), Value: aws.String(awsClusterProviderConfig.ClusterDeploymentSpec.ClusterID)},
+		//{Key: aws.String("clusterid"), Value: aws.String(awsClusterProviderConfig.ClusterDeploymentSpec.ClusterID)},
+		//{Key: aws.String("host-type"), Value: aws.String(hostType)},
+		//{Key: aws.String("sub-host-type"), Value: aws.String(subHostType)},
+		////{Key: aws.String("kubernetes.io/cluster/" + awsClusterProviderConfig.ClusterDeploymentSpec.ClusterID), Value: aws.String(awsClusterProviderConfig.ClusterDeploymentSpec.ClusterID)},
+		{Key: aws.String("kubernetes.io/cluster/meh"), Value: aws.String("owned")},
+		{Key: aws.String("tectonicClusterID"), Value: aws.String("447c6a4c-92a9-0266-3a23-9e3495006e24")},
 		{Key: aws.String("Name"), Value: aws.String(machine.Name)},
 	}
 	tagInstance := &ec2.TagSpecification{
@@ -275,24 +277,24 @@ func (a *Actuator) CreateMachine(cluster *clusterv1.Cluster, machine *clusterv1.
 	}
 
 	// For now, these are fixed
-	blkDeviceMappings := []*ec2.BlockDeviceMapping{
-		{
-			DeviceName: aws.String("/dev/sda"),
-			Ebs: &ec2.EbsBlockDevice{
-				DeleteOnTermination: aws.Bool(true),
-				VolumeSize:          aws.Int64(100),
-				VolumeType:          aws.String("gp2"),
-			},
-		},
-		//{
-		//	DeviceName: aws.String("/dev/sdb"),
-		//	Ebs: &ec2.EbsBlockDevice{
-		//		DeleteOnTermination: aws.Bool(true),
-		//		VolumeSize:          aws.Int64(100),
-		//		VolumeType:          aws.String("gp2"),
-		//	},
-		//},
-	}
+	//blkDeviceMappings := []*ec2.BlockDeviceMapping{
+	//	{
+	//		DeviceName: aws.String("/dev/sda"),
+	//		Ebs: &ec2.EbsBlockDevice{
+	//			DeleteOnTermination: aws.Bool(true),
+	//			VolumeSize:          aws.Int64(100),
+	//			VolumeType:          aws.String("gp2"),
+	//		},
+	//	},
+	//	//{
+	//	//	DeviceName: aws.String("/dev/sdb"),
+	//	//	Ebs: &ec2.EbsBlockDevice{
+	//	//		DeleteOnTermination: aws.Bool(true),
+	//	//		VolumeSize:          aws.Int64(100),
+	//	//		VolumeType:          aws.String("gp2"),
+	//	//	},
+	//	//},
+	//}
 
 	// Only compute nodes should get user data, and it's quite important that masters do not as the
 	// AWS actuator for these is running on the root CO cluster currently, and we do not want to leak
@@ -301,7 +303,11 @@ func (a *Actuator) CreateMachine(cluster *clusterv1.Cluster, machine *clusterv1.
 	//if err != nil {
 	//	return nil, err
 	//}
-	userDataEnc := base64.StdEncoding.EncodeToString([]byte(""))
+	//userData, err := GenerateIgnConfig()
+	//if err != nil {
+	//	return nil, err
+	//}
+	userDataEnc := base64.StdEncoding.EncodeToString([]byte(userDataTemplate))
 
 	inputConfig := ec2.RunInstancesInput{
 		ImageId:      describeAMIResult.Images[0].ImageId,
@@ -312,10 +318,10 @@ func (a *Actuator) CreateMachine(cluster *clusterv1.Cluster, machine *clusterv1.
 		IamInstanceProfile: &ec2.IamInstanceProfileSpecification{
 			Name: aws.String(iamRole(machine)),
 		},
-		BlockDeviceMappings: blkDeviceMappings,
-		TagSpecifications:   []*ec2.TagSpecification{tagInstance, tagVolume},
-		NetworkInterfaces:   networkInterfaces,
-		UserData:            &userDataEnc,
+		//BlockDeviceMappings: blkDeviceMappings,
+		TagSpecifications: []*ec2.TagSpecification{tagInstance, tagVolume},
+		NetworkInterfaces: networkInterfaces,
+		UserData:          &userDataEnc,
 		InstanceInitiatedShutdownBehavior: aws.String(shutdownBehavior),
 	}
 
@@ -538,35 +544,41 @@ func getClusterID(machine *clusterv1.Machine) (string, error) {
 	//}
 	//return coMachineSetSpec.ClusterID, nil
 	//TODO: get this dynamically
-	return "test", nil
+	return "meh.tectonic.kuwit.rocks", nil
 }
 
 // template for user data
 // takes the following parameters:
 // 1 - type of machine (infra/compute)
 // 2 - base64-encoded bootstrap.kubeconfig
-const userDataTemplate = `#cloud-config
-write_files:
-- path: /root/openshift_bootstrap/openshift_settings.yaml
-  owner: 'root:root'
-  permissions: '0640'
-  content: |
-    openshift_group_type: {{ .NodeType }}
-{{- if .IsNode }}
-- path: /etc/origin/node/bootstrap.kubeconfig
-  owner: 'root:root'
-  permissions: '0640'
-  encoding: b64
-  content: {{ .BootstrapKubeconfig }}
-{{- end }}
-runcmd:
-- [ ansible-playbook, /root/openshift_bootstrap/bootstrap.yml]
-{{- if .IsNode }}
-- [ systemctl, restart, systemd-hostnamed]
-- [ systemctl, restart, NetworkManager]
-- [ systemctl, enable, origin-node]
-- [ systemctl, start, origin-node]
-{{- end }}`
+const userDataTemplate = `{
+  "ignition": {
+    "config": {
+      "append": [
+        {
+          "source": "https://meh-tnc.tectonic.kuwit.rocks:80/config/worker",
+          "verification": {}
+        }
+      ]
+    },
+    "security": {
+      "tls": {
+        "certificateAuthorities": [
+          {
+            "source": "data:text/plain;charset=utf-8;base64,LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSURDVENDQWZHZ0F3SUJBZ0lCQURBTkJna3Foa2lHOXcwQkFRc0ZBREFtTVJJd0VBWURWUVFMRXdsdmNHVnUKYzJocFpuUXhFREFPQmdOVkJBTVRCM0p2YjNRdFkyRXdIaGNOTVRnd09EQTRNVEl4T1RJeVdoY05Namd3T0RBMQpNVEl4T1RJeVdqQW1NUkl3RUFZRFZRUUxFd2x2Y0dWdWMyaHBablF4RURBT0JnTlZCQU1UQjNKdmIzUXRZMkV3CmdnRWlNQTBHQ1NxR1NJYjNEUUVCQVFVQUE0SUJEd0F3Z2dFS0FvSUJBUUM3VHF6NWJ5Y0xEYjI4SkhWeUV2VWEKVHNldjUyKzdpay9zbitlelZFTFZZMXc5ODJCdTdDVnFKR01uR09pWGl4RVZCVW1qenBVUTJaektCaU8xbWIyNwpwM0Mza0lHZS9vUVRRT3pQRUVKY2o1WFpUM1lTMmhSNWtKQ3FZMm1QTE1iaGllMFBEbUh5NG00Q28yNG1vRGx1CkE3Y1BKV0lrd2NxMUZvL1JMbVdveXpjaWJRdjJzeWNCRjNpUFdJeFZ1ZzdyWDRYQ3lIQnVjaGZwYytQdGxIVkgKc1A3WGxDYVJGcFM4OTRrdnFGcXp1dnoway9aM3V2R2VsbHl1QktIWWN1UjUzcTJjVno1UUpmMFFQVjhBVFpHcwo5UEpWcVgycmNpMUtrZ0phVDVISElYVTY1N0RvTlpHWnBqZVNNekVsV0dJeHdQWFJDc3c5YUNyVGFibFhpeFNmCkFnTUJBQUdqUWpCQU1BNEdBMVVkRHdFQi93UUVBd0lDcERBUEJnTlZIUk1CQWY4RUJUQURBUUgvTUIwR0ExVWQKRGdRV0JCUW1vSGhnYkQvaXZ0NEtKSWo3WlFkei9JQzBKREFOQmdrcWhraUc5dzBCQVFzRkFBT0NBUUVBS1ZYawpkSmNvdXpERnllRlFuNVN0VjI4dzBiRDJLcm1UVG1HYnFRV2J3NEt3amtiaEwrRHRxSUtsRmlGaWxyelBGdTdDCjU1aWRxeU9IYVh0VWQ1b05yYzhZbDQxME4vSUlsNUh1Y280TXhVUjBIUnFqTkhZS3VDWmF1NHMxYUFWanRoRVMKM2s2ZkVQTy9lTzBaMGwwOW1ZekhwenZZWWtrQ2RwOVROUDk0eHBMZTVvaC85OEMrODRncFliWnpISmY4NzNwTgpCRG5zUUJvVXZVTkxwSSt2YmZ2UEFoUU9STDFzMGdPRGpBQ2psQ0NJSGxlYTJqUXdYRy9EWEd2bjRPVUI4Y1lKCmIwMkdaMWxrRWp1WmkwTS92USs0bEhuUy8xT3RoYTh5dmZETTNkaGMrTGNQbDh2aGxoazU0L3VkOURoZkFDWVEKMlV0UkZ1UkZKUmhJdmVJZ1lRPT0KLS0tLS1FTkQgQ0VSVElGSUNBVEUtLS0tLQo=",
+            "verification": {}
+          }
+        ]
+      }
+    },
+    "timeouts": {},
+    "version": "2.2.0"
+  },
+  "networkd": {},
+  "passwd": {},
+  "storage": {},
+  "systemd": {}
+}`
 
 type userDataParams struct {
 	NodeType            string
