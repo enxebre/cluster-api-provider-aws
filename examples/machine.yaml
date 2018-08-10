@@ -17,7 +17,7 @@ spec:
     value:
       apiVersion: awsproviderconfig/v1alpha1
       kind: AWSClusterProviderConfig
-      clusterId: test
+      clusterId: meh.tectonic.kuwit.rocks
       clusterVersionRef:
         namespace: test
         name: test
@@ -31,7 +31,7 @@ spec:
           sslSecret:
             name: test-certs
           region: eu-west-1
-          keyPairName: test
+          keyPairName: tectonic
       defaultHardwareSpec:
         aws:
           instanceType: t1.micro
@@ -49,7 +49,7 @@ spec:
 apiVersion: "cluster.k8s.io/v1alpha1"
 kind: Machine
 metadata:
-  name: test
+  name: extra-worker
   namespace: test
   generateName: vs-master-
   labels:
@@ -59,12 +59,12 @@ spec:
     value:
       apiVersion: awsproviderconfig/v1alpha1
       kind: AWSMachineProviderConfig
-      clusterId: test
+      clusterId: meh.tectonic.kuwit.rocks
       clusterHardware:
         aws:
           accountSecret:
             name: test-aws-creds
-          keyPairName: test
+          keyPairName: tectonic
           region: eu-west-1
           sshSecret:
             name: test-ssh-key
@@ -76,8 +76,8 @@ spec:
           instanceType: t1.micro
       infra: false
       vmImage:
-        # CoreOS-stable-1520.5.0
-        awsImage: ami-03f6257a
+        # CoreOS-beta-1828.3.0-hvm
+        awsImage: ami-0518e1ac70d8a3389
   versions:
     kubelet: 1.10.1
     controlPlane: 1.10.1
