@@ -17,11 +17,9 @@ limitations under the License.
 package aws
 
 import (
-	"bytes"
 	"encoding/base64"
 	"fmt"
-	"io/ioutil"
-	"text/template"
+	"strings"
 
 	log "github.com/sirupsen/logrus"
 
@@ -37,7 +35,6 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/ec2"
 
-	"github.com/aws/aws-sdk-go/service/elb"
 	awsconfigv1 "github.com/enxebre/cluster-api-provider-aws/awsproviderconfig/v1alpha1"
 	cov1 "github.com/enxebre/cluster-api-provider-aws/awsproviderconfig/v1alpha1"
 	"github.com/openshift/cluster-operator/pkg/controller"
@@ -45,23 +42,8 @@ import (
 )
 
 const (
-	// Path to bootstrap kubeconfig. This needs to be mounted to the controller pod
-	// as a secret when running this controller.
-	bootstrapKubeConfig = "/etc/origin/master/bootstrap.kubeconfig"
-
-	// IAM role for infra/compute
-	defaultIAMRole = "openshift_node_describe_instances"
-
-	// IAM role for master
-	masterIAMRole = "openshift_master_launch_instances"
-
-	// Instance ID annotation
-	instanceIDAnnotation = "cluster-operator.openshift.io/aws-instance-id"
-
 	awsCredsSecretIDKey     = "awsAccessKeyId"
 	awsCredsSecretAccessKey = "awsSecretAccessKey"
-
-	ec2InstanceIDNotFoundCode = "InvalidInstanceID.NotFound"
 )
 
 // Instance tag constants
@@ -86,10 +68,14 @@ type Actuator struct {
 	defaultAvailabilityZone string
 	logger                  *log.Entry
 	clientBuilder           func(kubeClient kubernetes.Interface, mSpec *cov1.MachineSetSpec, namespace, region string) (Client, error)
-	userDataGenerator       func(master, infra bool) (string, error)
-	awsProviderConfigCodec  *awsconfigv1.AWSProviderConfigCodec
-	scheme                  *runtime.Scheme
-	ignConfig               func(kubeClient kubernetes.Interface) (string, error)
+	//userDataGenerator       func(master, infra bool) (string, error)
+	awsProviderConfigCodec *awsconfigv1.AWSProviderConfigCodec
+	scheme                 *runtime.Scheme
+	ignConfig              func(kubeClient kubernetes.Interface) (string, error)
+}
+
+func getWorkerRole() {
+
 }
 
 // NewActuator returns a new AWS Actuator
@@ -111,10 +97,10 @@ func NewActuator(kubeClient kubernetes.Interface, clusterClient clusterclient.In
 		defaultAvailabilityZone: defaultAvailabilityZone,
 		logger:                  logger,
 		clientBuilder:           NewClient,
-		userDataGenerator:       generateUserData,
-		awsProviderConfigCodec:  codec,
-		scheme:                  scheme,
-		ignConfig:               getIgn,
+		//userDataGenerator:       generateUserData,
+		awsProviderConfigCodec: codec,
+		scheme:                 scheme,
+		ignConfig:              getIgn,
 	}
 	return actuator
 }
@@ -188,7 +174,8 @@ func (a *Actuator) CreateMachine(cluster *clusterv1.Cluster, machine *clusterv1.
 	}
 
 	// Describe VPC
-	vpcName := "meh.tectonic.kuwit.rocks"
+	vpcName := awsProviderConfig.ClusterID
+	clusterName := strings.Split(vpcName, ".")[0]
 	vpcNameFilter := "tag:Name"
 	describeVpcsRequest := ec2.DescribeVpcsInput{
 		Filters: []*ec2.Filter{{Name: &vpcNameFilter, Values: []*string{&vpcName}}},
@@ -262,12 +249,8 @@ func (a *Actuator) CreateMachine(cluster *clusterv1.Cluster, machine *clusterv1.
 
 	// Add tags to the created machine
 	tagList := []*ec2.Tag{
-		//{Key: aws.String("clusterid"), Value: aws.String(awsClusterProviderConfig.ClusterDeploymentSpec.ClusterID)},
-		//{Key: aws.String("host-type"), Value: aws.String(hostType)},
-		//{Key: aws.String("sub-host-type"), Value: aws.String(subHostType)},
-		////{Key: aws.String("kubernetes.io/cluster/" + awsClusterProviderConfig.ClusterDeploymentSpec.ClusterID), Value: aws.String(awsClusterProviderConfig.ClusterDeploymentSpec.ClusterID)},
-		{Key: aws.String("clusterid"), Value: aws.String("meh.tectonic.kuwit.rocks")},
-		{Key: aws.String("kubernetes.io/cluster/meh"), Value: aws.String("owned")},
+		{Key: aws.String("clusterid"), Value: aws.String(vpcName)},
+		{Key: aws.String(fmt.Sprintf("kubernetes.io/cluster/%s", clusterName)), Value: aws.String("owned")},
 		{Key: aws.String("tectonicClusterID"), Value: aws.String("447c6a4c-92a9-0266-3a23-9e3495006e24")},
 		{Key: aws.String("Name"), Value: aws.String(machine.Name)},
 	}
@@ -279,40 +262,6 @@ func (a *Actuator) CreateMachine(cluster *clusterv1.Cluster, machine *clusterv1.
 		ResourceType: aws.String("volume"),
 		Tags:         tagList[0:1],
 	}
-
-	// For now, these are fixed
-	//blkDeviceMappings := []*ec2.BlockDeviceMapping{
-	//	{
-	//		DeviceName: aws.String("/dev/sda"),
-	//		Ebs: &ec2.EbsBlockDevice{
-	//			DeleteOnTermination: aws.Bool(true),
-	//			VolumeSize:          aws.Int64(100),
-	//			VolumeType:          aws.String("gp2"),
-	//		},
-	//	},
-	//	//{
-	//	//	DeviceName: aws.String("/dev/sdb"),
-	//	//	Ebs: &ec2.EbsBlockDevice{
-	//	//		DeleteOnTermination: aws.Bool(true),
-	//	//		VolumeSize:          aws.Int64(100),
-	//	//		VolumeType:          aws.String("gp2"),
-	//	//	},
-	//	//},
-	//}
-
-	// Only compute nodes should get user data, and it's quite important that masters do not as the
-	// AWS actuator for these is running on the root CO cluster currently, and we do not want to leak
-	// root CO cluster bootstrap kubeconfigs to the target cluster.
-	//userData, err := a.userDataGenerator(controller.MachineHasRole(machine, capicommon.MasterRole), coMachineSetSpec.Infra)
-	//if err != nil {
-	//	return nil, err
-	//}
-	//userData, err := GenerateIgnConfig()
-	//if err != nil {
-	//	return nil, err
-	//}
-
-	//userDataEnc := base64.StdEncoding.EncodeToString([]byte(userDataTemplate))
 
 	ignConfig, err := a.ignConfig(a.kubeClient)
 	if err != nil {
@@ -327,7 +276,7 @@ func (a *Actuator) CreateMachine(cluster *clusterv1.Cluster, machine *clusterv1.
 		MaxCount:     aws.Int64(1),
 		KeyName:      aws.String(awsClusterProviderConfig.ClusterDeploymentSpec.Hardware.AWS.KeyPairName),
 		IamInstanceProfile: &ec2.IamInstanceProfileSpecification{
-			Name: aws.String(iamRole(machine)),
+			Name: aws.String(iamRole(clusterName)),
 		},
 		//BlockDeviceMappings: blkDeviceMappings,
 		TagSpecifications: []*ec2.TagSpecification{tagInstance, tagVolume},
@@ -379,7 +328,8 @@ func (a *Actuator) DeleteMachine(machine *clusterv1.Machine) error {
 		return fmt.Errorf("error getting EC2 client: %v", err)
 	}
 
-	instances, err := GetRunningInstances(machine, client)
+	clusterId := awsProviderConfig.ClusterID
+	instances, err := GetRunningInstances(machine, client, clusterId)
 	if err != nil {
 		return err
 	}
@@ -419,7 +369,7 @@ func (a *Actuator) Update(cluster *clusterv1.Cluster, machine *clusterv1.Machine
 		return fmt.Errorf("unable to obtain EC2 client: %v", err)
 	}
 
-	instances, err := GetRunningInstances(machine, client)
+	instances, err := GetRunningInstances(machine, client, awsProviderConfig.ClusterID)
 	mLog.Debugf("found %d instances for machine", len(instances))
 	if err != nil {
 		return err
@@ -475,7 +425,7 @@ func (a *Actuator) Exists(cluster *clusterv1.Cluster, machine *clusterv1.Machine
 		return false, fmt.Errorf("error getting EC2 client: %v", err)
 	}
 
-	instances, err := GetRunningInstances(machine, client)
+	instances, err := GetRunningInstances(machine, client, awsProviderConfig.ClusterID)
 	if err != nil {
 		return false, err
 	}
@@ -550,112 +500,8 @@ func (a *Actuator) updateStatus(machine *clusterv1.Machine, instance *ec2.Instan
 	return nil
 }
 
-func getClusterID(machine *clusterv1.Machine) (string, error) {
-	//coMachineSetSpec, err := controller.MachineSetSpecFromClusterAPIMachineSpec(&machine.Spec)
-	//if err != nil {
-	//	return "", err
-	//}
-	//return coMachineSetSpec.ClusterID, nil
-	//TODO: get this dynamically
-	return "meh.tectonic.kuwit.rocks", nil
-}
-
-// template for user data
-// takes the following parameters:
-// 1 - type of machine (infra/compute)
-// 2 - base64-encoded bootstrap.kubeconfig
-const userDataTemplate = `{
-  "ignition": {
-    "config": {
-      "append": [
-        {
-          "source": "https://meh-tnc.tectonic.kuwit.rocks:80/config/worker",
-          "verification": {}
-        }
-      ]
-    },
-    "security": {
-      "tls": {
-        "certificateAuthorities": [
-          {
-            "source": "data:text/plain;charset=utf-8;base64,LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSURDVENDQWZHZ0F3SUJBZ0lCQURBTkJna3Foa2lHOXcwQkFRc0ZBREFtTVJJd0VBWURWUVFMRXdsdmNHVnUKYzJocFpuUXhFREFPQmdOVkJBTVRCM0p2YjNRdFkyRXdIaGNOTVRnd09EQTRNVEl4T1RJeVdoY05Namd3T0RBMQpNVEl4T1RJeVdqQW1NUkl3RUFZRFZRUUxFd2x2Y0dWdWMyaHBablF4RURBT0JnTlZCQU1UQjNKdmIzUXRZMkV3CmdnRWlNQTBHQ1NxR1NJYjNEUUVCQVFVQUE0SUJEd0F3Z2dFS0FvSUJBUUM3VHF6NWJ5Y0xEYjI4SkhWeUV2VWEKVHNldjUyKzdpay9zbitlelZFTFZZMXc5ODJCdTdDVnFKR01uR09pWGl4RVZCVW1qenBVUTJaektCaU8xbWIyNwpwM0Mza0lHZS9vUVRRT3pQRUVKY2o1WFpUM1lTMmhSNWtKQ3FZMm1QTE1iaGllMFBEbUh5NG00Q28yNG1vRGx1CkE3Y1BKV0lrd2NxMUZvL1JMbVdveXpjaWJRdjJzeWNCRjNpUFdJeFZ1ZzdyWDRYQ3lIQnVjaGZwYytQdGxIVkgKc1A3WGxDYVJGcFM4OTRrdnFGcXp1dnoway9aM3V2R2VsbHl1QktIWWN1UjUzcTJjVno1UUpmMFFQVjhBVFpHcwo5UEpWcVgycmNpMUtrZ0phVDVISElYVTY1N0RvTlpHWnBqZVNNekVsV0dJeHdQWFJDc3c5YUNyVGFibFhpeFNmCkFnTUJBQUdqUWpCQU1BNEdBMVVkRHdFQi93UUVBd0lDcERBUEJnTlZIUk1CQWY4RUJUQURBUUgvTUIwR0ExVWQKRGdRV0JCUW1vSGhnYkQvaXZ0NEtKSWo3WlFkei9JQzBKREFOQmdrcWhraUc5dzBCQVFzRkFBT0NBUUVBS1ZYawpkSmNvdXpERnllRlFuNVN0VjI4dzBiRDJLcm1UVG1HYnFRV2J3NEt3amtiaEwrRHRxSUtsRmlGaWxyelBGdTdDCjU1aWRxeU9IYVh0VWQ1b05yYzhZbDQxME4vSUlsNUh1Y280TXhVUjBIUnFqTkhZS3VDWmF1NHMxYUFWanRoRVMKM2s2ZkVQTy9lTzBaMGwwOW1ZekhwenZZWWtrQ2RwOVROUDk0eHBMZTVvaC85OEMrODRncFliWnpISmY4NzNwTgpCRG5zUUJvVXZVTkxwSSt2YmZ2UEFoUU9STDFzMGdPRGpBQ2psQ0NJSGxlYTJqUXdYRy9EWEd2bjRPVUI4Y1lKCmIwMkdaMWxrRWp1WmkwTS92USs0bEhuUy8xT3RoYTh5dmZETTNkaGMrTGNQbDh2aGxoazU0L3VkOURoZkFDWVEKMlV0UkZ1UkZKUmhJdmVJZ1lRPT0KLS0tLS1FTkQgQ0VSVElGSUNBVEUtLS0tLQo=",
-            "verification": {}
-          }
-        ]
-      }
-    },
-    "timeouts": {},
-    "version": "2.2.0"
-  },
-  "networkd": {},
-  "passwd": {},
-  "storage": {},
-  "systemd": {}
-}`
-
-type userDataParams struct {
-	NodeType            string
-	BootstrapKubeconfig string
-	IsNode              bool
-}
-
-func executeTemplate(isMaster, isInfra bool, bootstrapKubeconfig string) (string, error) {
-	var nodeType string
-	if isMaster {
-		nodeType = "master"
-	} else if isInfra {
-		nodeType = "infra"
-	} else {
-		nodeType = "compute"
-	}
-	params := userDataParams{
-		NodeType:            nodeType,
-		BootstrapKubeconfig: bootstrapKubeconfig,
-		IsNode:              !isMaster,
-	}
-
-	t, err := template.New("userdata").Parse(userDataTemplate)
-	if err != nil {
-		return "", err
-	}
-	var buf bytes.Buffer
-	err = t.Execute(&buf, params)
-	if err != nil {
-		return "", err
-	}
-	return buf.String(), nil
-}
-
-// generateUserData is a generator function used in the actuator to create the user data for a
-// specific type of machine.
-func generateUserData(isMaster, isInfra bool) (string, error) {
-	var bootstrapKubeconfig string
-	var err error
-	if !isMaster {
-		bootstrapKubeconfig, err = getBootstrapKubeconfig()
-		if err != nil {
-			return "", fmt.Errorf("cannot get bootstrap kubeconfig: %v", err)
-		}
-	}
-
-	return executeTemplate(isMaster, isInfra, bootstrapKubeconfig)
-}
-
-// getBootstrapKubeconfig reads the bootstrap kubeconfig expected to be mounted into the pod. This assumes
-// the actuator runs on a master which has such a kubeconfig for joining nodes to the cluster.
-func getBootstrapKubeconfig() (string, error) {
-	content, err := ioutil.ReadFile(bootstrapKubeConfig)
-	if err != nil {
-		return "", err
-	}
-	return base64.StdEncoding.EncodeToString(content), nil
-}
-
-func iamRole(machine *clusterv1.Machine) string {
-	if controller.MachineHasRole(machine, capicommon.MasterRole) {
-		return masterIAMRole
-	}
-	return defaultIAMRole
+func iamRole(clusterName string) string {
+	return fmt.Sprintf("%s-master-profile", clusterName)
 }
 
 func buildDescribeSecurityGroupsInput(vpcID, vpcName string, isMaster, isInfra bool) *ec2.DescribeSecurityGroupsInput {
@@ -668,19 +514,4 @@ func buildDescribeSecurityGroupsInput(vpcID, vpcName string, isMaster, isInfra b
 			{Name: aws.String("group-name"), Values: groupNames},
 		},
 	}
-}
-
-func addInstanceToELB(instance *ec2.Instance, elbName string, client Client) error {
-	registerInput := elb.RegisterInstancesWithLoadBalancerInput{
-		Instances:        []*elb.Instance{{InstanceId: instance.InstanceId}},
-		LoadBalancerName: aws.String(elbName),
-	}
-
-	// This API call appears to be idempotent, so for now no need to check if the instance is
-	// registered first, we can just request that it be added.
-	_, err := client.RegisterInstancesWithLoadBalancer(&registerInput)
-	if err != nil {
-		return err
-	}
-	return nil
 }
