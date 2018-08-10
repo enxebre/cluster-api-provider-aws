@@ -37,6 +37,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/ec2"
 
+	"github.com/aws/aws-sdk-go/service/elb"
 	awsconfigv1 "github.com/enxebre/cluster-api-provider-aws/awsproviderconfig/v1alpha1"
 	cov1 "github.com/enxebre/cluster-api-provider-aws/awsproviderconfig/v1alpha1"
 	"github.com/openshift/cluster-operator/pkg/controller"
@@ -88,6 +89,7 @@ type Actuator struct {
 	userDataGenerator       func(master, infra bool) (string, error)
 	awsProviderConfigCodec  *awsconfigv1.AWSProviderConfigCodec
 	scheme                  *runtime.Scheme
+	ignConfig               func(kubeClient kubernetes.Interface) (string, error)
 }
 
 // NewActuator returns a new AWS Actuator
@@ -112,6 +114,7 @@ func NewActuator(kubeClient kubernetes.Interface, clusterClient clusterclient.In
 		userDataGenerator:       generateUserData,
 		awsProviderConfigCodec:  codec,
 		scheme:                  scheme,
+		ignConfig:               getIgn,
 	}
 	return actuator
 }
@@ -263,6 +266,7 @@ func (a *Actuator) CreateMachine(cluster *clusterv1.Cluster, machine *clusterv1.
 		//{Key: aws.String("host-type"), Value: aws.String(hostType)},
 		//{Key: aws.String("sub-host-type"), Value: aws.String(subHostType)},
 		////{Key: aws.String("kubernetes.io/cluster/" + awsClusterProviderConfig.ClusterDeploymentSpec.ClusterID), Value: aws.String(awsClusterProviderConfig.ClusterDeploymentSpec.ClusterID)},
+		{Key: aws.String("clusterid"), Value: aws.String("meh.tectonic.kuwit.rocks")},
 		{Key: aws.String("kubernetes.io/cluster/meh"), Value: aws.String("owned")},
 		{Key: aws.String("tectonicClusterID"), Value: aws.String("447c6a4c-92a9-0266-3a23-9e3495006e24")},
 		{Key: aws.String("Name"), Value: aws.String(machine.Name)},
@@ -307,7 +311,14 @@ func (a *Actuator) CreateMachine(cluster *clusterv1.Cluster, machine *clusterv1.
 	//if err != nil {
 	//	return nil, err
 	//}
-	userDataEnc := base64.StdEncoding.EncodeToString([]byte(userDataTemplate))
+
+	//userDataEnc := base64.StdEncoding.EncodeToString([]byte(userDataTemplate))
+
+	ignConfig, err := a.ignConfig(a.kubeClient)
+	if err != nil {
+		return nil, fmt.Errorf("unable to obtain EC2 client: %v", err)
+	}
+	userDataEnc := base64.StdEncoding.EncodeToString([]byte(ignConfig))
 
 	inputConfig := ec2.RunInstancesInput{
 		ImageId:      describeAMIResult.Images[0].ImageId,
@@ -334,6 +345,8 @@ func (a *Actuator) CreateMachine(cluster *clusterv1.Cluster, machine *clusterv1.
 		mLog.Errorf("unexpected reservation creating instances: %v", runResult)
 		return nil, fmt.Errorf("unexpected reservation creating instance")
 	}
+
+	//addInstanceToELB(runResult.Instances[0], "", client)
 	return runResult.Instances[0], nil
 }
 
@@ -647,18 +660,7 @@ func iamRole(machine *clusterv1.Machine) string {
 
 func buildDescribeSecurityGroupsInput(vpcID, vpcName string, isMaster, isInfra bool) *ec2.DescribeSecurityGroupsInput {
 	groupNames := []*string{aws.String(vpcName)}
-	if isMaster {
-		groupNames = append(groupNames, aws.String(vpcName+"_master"))
-		groupNames = append(groupNames, aws.String(vpcName+"_master_k8s"))
-	}
-	if isInfra {
-		groupNames = append(groupNames, aws.String(vpcName+"_infra"))
-		groupNames = append(groupNames, aws.String(vpcName+"_infra_k8s"))
-	}
-	if !isMaster && !isInfra {
-		groupNames = append(groupNames, aws.String(vpcName+"_compute"))
-		groupNames = append(groupNames, aws.String(vpcName+"_compute_k8s"))
-	}
+	groupNames = append(groupNames, aws.String(vpcName+"_worker_sg"))
 
 	return &ec2.DescribeSecurityGroupsInput{
 		Filters: []*ec2.Filter{
@@ -666,4 +668,19 @@ func buildDescribeSecurityGroupsInput(vpcID, vpcName string, isMaster, isInfra b
 			{Name: aws.String("group-name"), Values: groupNames},
 		},
 	}
+}
+
+func addInstanceToELB(instance *ec2.Instance, elbName string, client Client) error {
+	registerInput := elb.RegisterInstancesWithLoadBalancerInput{
+		Instances:        []*elb.Instance{{InstanceId: instance.InstanceId}},
+		LoadBalancerName: aws.String(elbName),
+	}
+
+	// This API call appears to be idempotent, so for now no need to check if the instance is
+	// registered first, we can just request that it be added.
+	_, err := client.RegisterInstancesWithLoadBalancer(&registerInput)
+	if err != nil {
+		return err
+	}
+	return nil
 }

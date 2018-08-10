@@ -129,3 +129,15 @@ func NewClient(kubeClient kubernetes.Interface, mSpec *cov1.MachineSetSpec, name
 		elbClient: elb.New(s),
 	}, nil
 }
+
+func getIgn(kubeClient kubernetes.Interface) (string, error) {
+	ignConfig, err := kubeClient.CoreV1().ConfigMaps("kube-system").Get("ign-config", metav1.GetOptions{})
+	if err != nil {
+		return "", err
+	}
+	ignConfigWorker, ok := ignConfig.Data["worker"]
+	if !ok {
+		return "", nil
+	}
+	return ignConfigWorker, nil
+}
