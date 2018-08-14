@@ -47,7 +47,7 @@ const (
 
 func init() {
 	config.ControllerConfig.AddFlags(pflag.CommandLine)
-	pflag.CommandLine.StringVar(&defaultAvailabilityZone, "default-availability-zone", "us-east-1c", "Default availability zone for machines created by this controller.")
+	pflag.CommandLine.StringVar(&defaultAvailabilityZone, "default-availability-zone", "", "Default availability zone for machines created by this controller.")
 	pflag.CommandLine.StringVar(&logLevel, "log-level", defaultLogLevel, "Log level (debug,info,warn,error,fatal)")
 }
 
