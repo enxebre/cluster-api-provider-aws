@@ -173,7 +173,7 @@ func (s *Service) CreateInstance(scope *scope.MachineScope, userData []byte) (*i
 	}
 	input.SubnetID = subnetID
 
-	if !scope.IsExternalInfraCluster() && !scope.IsEKSManaged() && s.scope.Network().APIServerELB.DNSName == "" {
+	if !scope.IsExternalInfraCluster() && !scope.IsEKSManaged() && !scope.InfraCluster.Unmanaged() && s.scope.Network().APIServerELB.DNSName == "" {
 		record.Eventf(s.scope.InfraCluster(), "FailedCreateInstance", "Failed to run controlplane, APIServer ELB not available")
 
 		return nil, awserrors.NewFailedDependency("failed to run controlplane, APIServer ELB not available")
@@ -362,7 +362,7 @@ func (s *Service) getFilteredSubnets(criteria ...*ec2.Filter) ([]*ec2.Subnet, er
 // GetCoreSecurityGroups looks up the security group IDs managed by this actuator
 // They are considered "core" to its proper functioning
 func (s *Service) GetCoreSecurityGroups(scope *scope.MachineScope) ([]string, error) {
-	if scope.IsExternalInfraCluster() {
+	if scope.IsExternalInfraCluster() || s.scope.Unmanaged() {
 		return nil, nil
 	}
 

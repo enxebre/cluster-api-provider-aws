@@ -90,6 +90,10 @@ type ClusterScope struct {
 	controllerName string
 }
 
+func (s *ClusterScope) Unmanaged() bool {
+	return s.AWSCluster.Spec.Unmanaged
+}
+
 // Network returns the cluster network object.
 func (s *ClusterScope) Network() *infrav1.Network {
 	return &s.AWSCluster.Status.Network

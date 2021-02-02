@@ -54,4 +54,7 @@ type EC2Scope interface {
 
 	// ImageLookupBaseOS returns the base operating system name to use when looking up AMIs
 	ImageLookupBaseOS() string
+
+	// Unmanaged unmanaged
+	Unmanaged() bool
 }

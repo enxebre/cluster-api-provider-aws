@@ -113,6 +113,11 @@ func (r *AWSClusterReconciler) Reconcile(req ctrl.Request) (_ ctrl.Result, reter
 		}
 	}()
 
+	if awsCluster.Spec.Unmanaged {
+		awsCluster.Status.Ready = true
+		return ctrl.Result{}, nil
+	}
+
 	// Handle deleted clusters
 	if !awsCluster.DeletionTimestamp.IsZero() {
 		return reconcileDelete(clusterScope)

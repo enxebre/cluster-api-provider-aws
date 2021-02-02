@@ -256,3 +256,8 @@ func (s *ExternalInfraClusterScope) ImageLookupOrg() string {
 func (s *ExternalInfraClusterScope) ImageLookupBaseOS() string {
 	return ""
 }
+
+// Unmanaged always returns false for managed control plane
+func (s *ExternalInfraClusterScope) Unmanaged() bool {
+	return false
+}

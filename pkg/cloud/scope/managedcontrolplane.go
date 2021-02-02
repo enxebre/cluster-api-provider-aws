@@ -276,3 +276,8 @@ func (s *ManagedControlPlaneScope) IAMAuthConfig() *ekscontrolplanev1.IAMAuthent
 	}
 	return s.ControlPlane.Spec.IAMAuthenticatorConfig
 }
+
+// Unmanaged always returns false for managed control plane
+func (s *ManagedControlPlaneScope) Unmanaged() bool {
+	return false
+}
