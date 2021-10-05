@@ -747,6 +747,14 @@ func (s *Service) getImageSnapshotSize(imageID string) (*int64, error) {
 		return nil, errors.Errorf("no images returned when looking up ID %q", imageID)
 	}
 
+	if len(output.Images[0].BlockDeviceMappings) == 0 {
+		return nil, errors.Errorf("no block device mappings returned when looking up ID %q", imageID)
+	}
+
+	if output.Images[0].BlockDeviceMappings[0].Ebs == nil {
+		return nil, errors.Errorf("no EBS returned when looking up ID %q", imageID)
+	}
+
 	return output.Images[0].BlockDeviceMappings[0].Ebs.VolumeSize, nil
 }
 
